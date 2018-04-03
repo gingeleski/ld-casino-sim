@@ -485,12 +485,9 @@ def get_bet_amount(count, shoe, bankroll):
 def main():
     # Simulate 12 shoes
     for i in range(0,12):
-        pnl, bankroll, hands_played, hands_sat_out = play()
-        print('shoe ' + str(i))
+        pnl = play()
+        print('shoe ' + str(i+1))
         print('pnl: ' + str(pnl))
-        print('bankroll: ' + str(bankroll))
-        print('hands played: ' + str(hands_played))
-        print('hands sat out: ' + str(hands_sat_out))
         print('---')
 
 if __name__=='__main__':
