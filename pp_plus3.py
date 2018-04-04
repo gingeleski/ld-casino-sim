@@ -41,6 +41,14 @@ def evaluate_pp(hand):
     # Don't have anything so lost the 1 unit
     return -1
 
+def check_for_strt(c1_rank, c2_rank, c3_rank):
+    rank_order = 'A23456789TJQKA'
+    ranks = [c1_rank, c2_rank, c3_rank]
+    for i in range(0,len(rank_order)-2):
+        if rank_order[i] in ranks and rank_order[i+1] in ranks and rank_order[i+2] in ranks:
+            return True
+    return False
+
 def evaluate_plus3(hand):
     c1_rank, c2_rank, c3_rank = hand[0][0], hand[1][0], hand[2][0]
     c1_suit, c2_suit, c3_suit = hand[0][1], hand[1][1], hand[2][1]
@@ -52,14 +60,7 @@ def evaluate_plus3(hand):
     elif same_rank:
         # Three-of-a-kind pays 25:1
         return 25
-    strts = ['A23','234','345','456','567','678','789','89T','9TJ','TJQ','JQK','QKA']
-    strt_eval = c1_rank + c2_rank + c3_rank
-    strt_eval_perms = [''.join(p) for p in itertools.permutations(strt_eval)]
-    is_strt = False
-    for p in strt_eval_perms:
-        if p in strts:
-            is_strt = True
-            break
+    is_strt = check_for_strt(c1_rank, c2_rank, c3_rank)
     if same_suit and is_strt:
         # Straight flush pays 40:1
         return 40
@@ -89,18 +90,19 @@ if __name__ == '__main__':
     setup = 'from __main__ import get_ev_of_pp, '
     setup += 'get_ev_of_plus3, '
     setup += 'fill_shoe, '
-    setup += 'evaluate_pp, '
+    setup += 'evaluate_pp, check_for_strt, '
     setup += 'evaluate_plus3' + '\n'
     setup += 'import itertools' + '\n'
     setup += 'import random' + '\n'
     setup += 'shoe = fill_shoe(8)' + '\n'
     setup += 'random.shuffle(shoe)'
-    print('PERFECT PAIRS EVALUATION, 8-DECK SHOE')
-    RUNS_TO_DO = 100
-    print('\t' + 'Avg runtime over ' + str(RUNS_TO_DO) + ' sessions (s) = ', end='')
-    total_runtime = timeit.timeit('get_ev_of_pp(shoe)', setup=setup, number=RUNS_TO_DO)
-    print(str(float(total_runtime / float(RUNS_TO_DO))))
+    #print('PERFECT PAIRS EVALUATION, 8-DECK SHOE')
+    #RUNS_TO_DO = 100
+    #print('\t' + 'Avg runtime over ' + str(RUNS_TO_DO) + ' sessions (s) = ', end='')
+    #total_runtime = timeit.timeit('get_ev_of_pp(shoe)', setup=setup, number=RUNS_TO_DO)
+    #print(str(float(total_runtime / float(RUNS_TO_DO))))
     print('PLUS3 EVALUATION, 8-DECK SHOE')
+    RUNS_TO_DO = 1
     print('\t' + 'Avg runtime over ' + str(RUNS_TO_DO) + ' sessions (s) = ', end='')
-    total_runtime = timeit.timeit('get_ev_of_plus3(shoe)', setup=setup, number=1)
+    total_runtime = timeit.timeit('get_ev_of_plus3(shoe)', setup=setup, number=RUNS_TO_DO)
     print(str(float(total_runtime / float(RUNS_TO_DO))))
