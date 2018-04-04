@@ -96,12 +96,13 @@ if __name__ == '__main__':
     setup += 'import random' + '\n'
     setup += 'shoe = fill_shoe(8)' + '\n'
     setup += 'random.shuffle(shoe)'
-    #print('PERFECT PAIRS EVALUATION, 8-DECK SHOE')
-    #RUNS_TO_DO = 100
-    #print('\t' + 'Avg runtime over ' + str(RUNS_TO_DO) + ' sessions (s) = ', end='')
-    #total_runtime = timeit.timeit('get_ev_of_pp(shoe)', setup=setup, number=RUNS_TO_DO)
-    #print(str(float(total_runtime / float(RUNS_TO_DO))))
+    print('PERFECT PAIRS EVALUATION, 8-DECK SHOE')
+    RUNS_TO_DO = 100
+    print('\t' + 'Avg runtime over ' + str(RUNS_TO_DO) + ' sessions (s) = ', end='')
+    total_runtime = timeit.timeit('get_ev_of_pp(shoe)', setup=setup, number=RUNS_TO_DO)
+    print(str(float(total_runtime / float(RUNS_TO_DO))))
     print('PLUS3 EVALUATION, 8-DECK SHOE')
+    # Below takes ~30 s on my Alienware R15 so not running a lot
     RUNS_TO_DO = 1
     print('\t' + 'Avg runtime over ' + str(RUNS_TO_DO) + ' sessions (s) = ', end='')
     total_runtime = timeit.timeit('get_ev_of_plus3(shoe)', setup=setup, number=RUNS_TO_DO)
