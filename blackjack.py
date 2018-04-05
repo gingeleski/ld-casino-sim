@@ -4,9 +4,10 @@ blackjack.py
 Simulator for online live dealer blackjack at the Golden Nugget
 """
 
-import random
+import itertools
 import math
 import os
+import random
 import sys
 
 import matplotlib.pyplot as plt
@@ -15,19 +16,19 @@ STARTING_BANKROLL = 5000
 DECKS_PER_SHOE = 8
 NUMBER_OF_OTHER_PLAYERS = 5
 PENETRATION = 0.50  # Dealer plays 50% of shoe then shuffles
+BLACKJACK_PAYOUT = 1.5  # 3:2
 HIT_SPLIT_ACES = False
 NORMAL_BET_AMOUNT = 25
-BET_ONLY_WHEN_FAVORABLE_COUNT = False
+BET_ONLY_WHEN_FAVORABLE_COUNT = True
 CARD_COUNTING_SYSTEM = 'WONG_HALVES'  # WONG_HALVES, HI_LO
 FAVORABLE_COUNT_THRESHOLD = 1.0
-COUNT_THE_PP_SIDE_BET = False
+COUNT_THE_PP_SIDE_BET = True
 PP_EV_THRESHOLD = 0.0
-COUNT_THE_PLUS3_SIDE_BET = False
+COUNT_THE_PLUS3_SIDE_BET = False # Note that turning this on extends runtime significantly
 PLUS3_EV_THRESHOLD = 0.0
 
 # TODO appropriate these original params below
 """
-BLACKJACK_PAYOUT = 1.5  # 3:2
 DEALER_HITS_SOFT_17 = True
 LATE_SURRENDER = False
 RESPLITS_ALLOWED = False
@@ -42,22 +43,26 @@ def play():
     starting_number_of_cards = len(shoe)
     count = 0.0
     pnl = 0.0
-    hands_played = 0
-    hands_sat_out = 0
     while (float(len(shoe)) / float(starting_number_of_cards)) > (1 - PENETRATION):
         bet_amt, pp_amt, plus3_amt = get_bet_amount(count, shoe, bankroll)
         players_hands = [{'hand':[],'bet_amt':bet_amt}]
         players_hands, dealer_hand, count = deal_round(shoe, players_hands, count)
-        outcome, count = play_round(shoe, players_hands, dealer_hand, count, bet_amt)
+        outcome, pp_outcome, plus3_outcome, count = play_round(shoe, players_hands, dealer_hand, count, bet_amt, pp_amt, plus3_amt)
         pnl += outcome
+        pnl += pp_outcome
+        pnl += plus3_outcome
         bankroll += outcome
+        bankroll += pp_outcome
+        bankroll += plus3_outcome
     return pnl
 
-def play_round(shoe, players_hands, dealer_hand, count, bet_amt):
+def play_round(shoe, players_hands, dealer_hand, count, bet_amt, pp_amt, plus3_amt):
     dealer_up_card = dealer_hand[0][0]
     dealer_down_card = dealer_hand[1][0]
 
     outcome = 0 # Net win/loss after each round, need to account for insurance
+    pp_outcome = 0 # Keeping "Perfect Pair" side bet outcome separate
+    plus3_outcome = 0 # Keeping "21+3" side bet outcome separate
     split_count = 0 # Ensure we don't split more than twice
     splits_indices = [] # Pull the right hands out of player's hand list once they're split
     aces_split = False # Under certain circumstances we ensure only 1 more card after split aces
@@ -69,6 +74,14 @@ def play_round(shoe, players_hands, dealer_hand, count, bet_amt):
         true_count = get_true_count(count, shoe)
         round_count = 0 # Track whether we're on first 2 cards or not
         while True:
+            if round_count == 0:
+                if pp_amt > 0 and pp_outcome == 0:
+                    pp_outcome = pp_amt * evaluate_pp(player_hand['hand'])
+                if plus3_amt > 0 and plus3_outcome == 0:
+                    three_card_hand = player_hand['hand']
+                    three_card_hand.append(dealer_up_card)
+                    plus3_outcome = plus3_amt * evaluate_plus3(player_hand['hand'])
+
             decision, insurance = get_decision(dealer_up_card, player_hand['hand'], true_count, split_count, round_count)
 
             dealer_has_bj = False
@@ -80,21 +93,21 @@ def play_round(shoe, players_hands, dealer_hand, count, bet_amt):
             if insurance:
                 if decision == 'blackjack': # Take even money
                     count = count_this_card(dealer_down_card, count)
-                    return bet_amt, count
+                    return bet_amt, pp_outcome, plus3_outcome, count
                 elif dealer_has_bj: # And player doesn't have blackjack
                     count = count_this_card(dealer_down_card, count)
-                    return 0, count
+                    return 0, pp_outcome, plus3_outcome, count
                 else: # Neither have blackjack
                     outcome -= (bet_amt / 2.0)
             elif dealer_has_bj:
                 count = count_this_card(dealer_down_card, count)
                 if decision == 'blackjack':
-                    return 0, count
+                    return 0, pp_outcome, plus3_outcome, count
                 else:
-                    return -bet_amt, count
+                    return -bet_amt, pp_outcome, plus3_outcome, count
             elif decision == 'blackjack':
                 count = count_this_card(dealer_down_card, count)
-                return (bet_amt * 1.5), count
+                return (bet_amt * BLACKJACK_PAYOUT), pp_outcome, plus3_outcome, count
 
             if decision == 'split':
                 split_count += 1
@@ -145,7 +158,6 @@ def play_round(shoe, players_hands, dealer_hand, count, bet_amt):
                     player_hand['bet_amt'] -= bet_amt * 0.5
                     player_hand['hand'].append('Tx')
                     break
-
             elif decision == 'stand':
                 break
 
@@ -156,7 +168,7 @@ def play_round(shoe, players_hands, dealer_hand, count, bet_amt):
     this_round_outcome = round_outcome(players_hands, dealer_hand)
     outcome += this_round_outcome
 
-    return outcome, count
+    return outcome, pp_outcome, plus3_outcome, count
 
 def play_dealer_hand(dealer_hand, shoe, count):
     count = count_this_card(dealer_hand[1], count)
@@ -410,10 +422,6 @@ def deal_round(shoe, players_hands, count):
 
 def count_this_card(card, count):
     card_val = card[0]
-    # FIXME there's a bug where rarely you get a card like '7' instead of '7h', etc...
-    card_suit = None
-    if len(card) > 1:     
-        card_suit = card[1]
     if CARD_COUNTING_SYSTEM == 'HI_LO':
         # Hi-lo system (Level I)
         if card_val == 'A' or card_val == 'K' or card_val == 'Q' or card_val == 'J' or card_val == 'T':
@@ -452,13 +460,76 @@ def get_card(shoe):
     else:
         return None
 
+def evaluate_pp(hand):
+    c1_suit, c2_suit = hand[0][1], hand[1][1]
+    same_suit = (c1_suit == c2_suit)
+    c1_rank, c2_rank = hand[0][0], hand[1][0]
+    same_rank = (c1_rank == c2_rank)
+    if same_suit and same_rank:
+        # "Perfect pair" pays 25:1
+        return 25
+    same_color = False
+    if same_suit == False:
+        if (c1_suit == 's' or c1_suit == 'c') and (c2_suit == 's' or c2_suit == 'c'):
+            # Both spade or club -> black
+            same_color = True
+        elif (c1_suit == 'h' or c1_suit == 'd') and (c2_suit == 'h' or c2_suit == 'd'):
+            # Both heart or diamond -> red
+            same_color = True            
+    if same_color and same_rank:
+        # Same color pair pays 12:1
+        return 12
+    elif same_rank:
+        # Mixed color pair pays 6:1
+        return 6
+    # Don't have anything so lost the 1 unit
+    return -1
+
+def check_for_strt(c1_rank, c2_rank, c3_rank):
+    rank_order = 'A23456789TJQKA'
+    ranks = [c1_rank, c2_rank, c3_rank]
+    for i in range(0,len(rank_order)-2):
+        if rank_order[i] in ranks and rank_order[i+1] in ranks and rank_order[i+2] in ranks:
+            return True
+    return False
+
+def evaluate_plus3(hand):
+    c1_rank, c2_rank, c3_rank = hand[0][0], hand[1][0], hand[2][0]
+    c1_suit, c2_suit, c3_suit = hand[0][1], hand[1][1], hand[2][1]
+    same_rank = (c1_rank == c2_rank == c3_rank)
+    same_suit = (c1_suit == c2_suit == c3_suit)
+    if same_rank and same_suit:
+        # Suited three-of-a-kind pays 100:1
+        return 100
+    elif same_rank:
+        # Three-of-a-kind pays 25:1
+        return 25
+    is_strt = check_for_strt(c1_rank, c2_rank, c3_rank)
+    if same_suit and is_strt:
+        # Straight flush pays 40:1
+        return 40
+    elif is_strt:
+        # Straight pays 10:1
+        return 10
+    elif same_suit:
+        # Flush pays 5:1
+        return 5
+    # Don't have anything so lost the 1 unit
+    return -1
+
 def get_pp_ev(shoe):
-    # TODO
-    return 0
+    permutations = itertools.combinations(shoe, 2)
+    yield_ = 0
+    for permutation in permutations:
+        yield_ += evaluate_pp(permutation)
+    return yield_
 
 def get_plus3_ev(shoe):
-    # TODO
-    return 0
+    permutations = itertools.combinations(shoe, 3)
+    yield_ = 0
+    for permutation in permutations:
+        yield_ += evaluate_plus3(permutation)
+    return yield_
 
 def get_bet_amount(count, shoe, bankroll):
     true_count = get_true_count(count, shoe)
@@ -475,20 +546,24 @@ def get_bet_amount(count, shoe, bankroll):
     if COUNT_THE_PP_SIDE_BET:
         pp_ev = get_pp_ev(shoe)
         if pp_ev > PP_EV_THRESHOLD:
+            print('\tpp_ev = ' + str(pp_ev))
             pp_ev = bet_amt
     if COUNT_THE_PLUS3_SIDE_BET:
         plus3_ev = get_plus3_ev(shoe)
         if plus3_ev > PLUS3_EV_THRESHOLD:
+            print('\tplus3_ev = ' + str(plus3_ev))
             plus3_ev = bet_amt
     return bet_amt, pp_amt, plus3_amt
 
 def main():
-    # Simulate 12 shoes
-    for i in range(0,12):
+    SHOES_TO_PLAY = 50
+    bankroll = STARTING_BANKROLL
+    for i in range(0,SHOES_TO_PLAY):
         pnl = play()
-        print('shoe ' + str(i+1))
-        print('pnl: ' + str(pnl))
-        print('---')
+        bankroll += pnl
+    print('Bankroll start = ' + str(STARTING_BANKROLL))
+    print('Bankroll end = ' + str(bankroll))
+    print('Profit ' + str(bankroll - STARTING_BANKROLL) + ' over ' + str(SHOES_TO_PLAY) + ' shoes')
 
 if __name__=='__main__':
     main()
